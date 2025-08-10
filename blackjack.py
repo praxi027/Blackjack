@@ -176,10 +176,8 @@ class BlackjackGame:
     def dealer_should_hit(self, hand):
         if hand.value() < 17:
             return True
-        if hand.value() == 17 and self.dealer_hits_soft_17:
-            # Check for soft 17
-            aces = sum(1 for c in hand.cards if c.rank == 'A')
-            return aces > 0 and hand.value() == 17
+        if hand.value() == 17 and self.dealer_hits_soft_17 and hand.is_soft():
+            return True
         return False
 
 def basic_strategy(hand, dealer_upcard):

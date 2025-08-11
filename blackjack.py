@@ -71,7 +71,7 @@ class Hand:
     def is_bust(self):
         return self.value() > 21
 
-    def can_split(self):
+    def is_pair(self):
         return len(self.cards) == 2 and self.cards[0].value == self.cards[1].value
     
     def can_double(self):
@@ -95,15 +95,14 @@ class BlackjackGame:
         i = 0
         while i < len(player_hands):
             hand = player_hands[i]
-
-            # If this hand is from splitting aces, give one card and stand immediately
+                
+            # If this hand is from splitting aces, stand immediately
             if hand.is_split_aces:
-                hand.add_card(self.shoe.deal_card())
                 i += 1
                 continue
 
             while True:
-                action = player_strategy(hand, dealer_hand.cards[0])
+                action = player_strategy(hand, dealer_hand.cards[0], split_allowed=split_count < 3)
 
                 if action == "hit":
                     hand.add_card(self.shoe.deal_card())
@@ -113,39 +112,32 @@ class BlackjackGame:
                 elif action == "stand":
                     break
 
-                elif action == "double" and len(hand.cards) == 2:
+                elif action == "double":
                     hand.bet *= 2
                     hand.doubled = True
                     hand.add_card(self.shoe.deal_card())
                     break
 
-                elif action == "split" and hand.can_split():
-                    if split_count >= 3:
-                        # max splits reached
-                        break
-
-                    # Prevent resplitting aces beyond first split
-                    if hand.is_split_aces:
-                        break  # can't split these aces again
-                    
+                elif action == "split":                 
                     # Check if splitting aces now
                     splitting_aces = (hand.cards[0].rank == 'A' and hand.cards[1].rank == 'A')
 
                     split_count += 1
 
-                    new_hand = Hand(bet=hand.bet, is_split_aces=splitting_aces)
+                    new_hand = Hand(bet=hand.bet)
                     new_hand.add_card(hand.cards.pop())  # move one card to new hand
                     hand.add_card(self.shoe.deal_card())  # draw card for first hand
+                    new_hand.add_card(self.shoe.deal_card())
                     player_hands.append(new_hand)
 
-                    # If splitting aces, flag both hands to stand after 1 card each
+                    # If splitting aces, flag both hands
                     if splitting_aces:
                         new_hand.is_split_aces = True
                         hand.is_split_aces = True
-
-                    break
-
+                        break
+                    continue
                 else:
+                    print("error")
                     break
 
             i += 1
@@ -157,8 +149,10 @@ class BlackjackGame:
         # Settle results
         results = []
         for hand in player_hands:
-            if hand.is_blackjack() and not dealer_hand.is_blackjack():
+            if hand.is_blackjack() and not dealer_hand.is_blackjack() and split_count == 0:
                 results.append(1.5 * hand.bet)
+            elif (not hand.is_blackjack() or split_count != 0) and dealer_hand.is_blackjack():
+                results.append(-hand.bet)
             elif hand.is_bust():
                 results.append(-hand.bet)
             elif dealer_hand.is_bust():
@@ -180,8 +174,8 @@ class BlackjackGame:
             return True
         return False
 
-def basic_strategy(hand, dealer_upcard):
-    if hand.is_blackjack(): 
+def basic_strategy(hand, dealer_upcard, split_allowed):
+    if hand.value() == 21: 
         return "stand"
     
     up = dealer_upcard.value
@@ -189,7 +183,7 @@ def basic_strategy(hand, dealer_upcard):
     ranks = [c.rank for c in hand.cards]
 
     # Pair splitting
-    if hand.can_split():
+    if hand.is_pair() and split_allowed:
         r = ranks[0]
         if r in ['A', '8']:
             return "split"
@@ -221,7 +215,6 @@ def basic_strategy(hand, dealer_upcard):
                 return "double"
             elif other == 9:
                 return "stand"
-            return "hit"
         else: 
             other = total - 11
             if other in [2, 3] and up in [5, 6]:
@@ -235,9 +228,7 @@ def basic_strategy(hand, dealer_upcard):
                     return "stand"
             elif other in [8, 9]:
                 return "stand"
-            return "hit"
     
-
     # Hard totals
     if hand.can_double():
         if total <= 8:
@@ -277,6 +268,6 @@ def basic_strategy(hand, dealer_upcard):
 # Example usage with a simple "hit under 17" strategy
 if __name__ == "__main__":
     game = BlackjackGame(num_decks=6, penetration=0.75, dealer_hits_soft_17=True)
-    num_runs = 5000000
+    num_runs = 1000000
     results = [game.play_round(basic_strategy) for _ in range(num_runs)]
     print(sum(bet for hand in results for bet in hand)/num_runs)

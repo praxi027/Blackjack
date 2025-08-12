@@ -37,11 +37,10 @@ class Shoe:
         return self.cards.pop()
 
 class Hand:
-    def __init__(self, bet=1, is_split_aces=False):
+    def __init__(self, bet=1):
         self.cards = []
         self.bet = bet
         self.doubled = False
-        self.is_split_aces = is_split_aces
 
     def add_card(self, card):
         self.cards.append(card)
@@ -93,34 +92,16 @@ class BlackjackGame:
             dealer_hand.add_card(self.shoe.deal_card())
 
         i = 0
-        while i < len(player_hands):
+        split_aces = False
+        while i < len(player_hands) and not split_aces:
             hand = player_hands[i]
-                
-            # If this hand is from splitting aces, stand immediately
-            if hand.is_split_aces:
-                i += 1
-                continue
 
             while True:
                 action = player_strategy(hand, dealer_hand.cards[0], split_allowed=split_count < 3)
-
-                if action == "hit":
-                    hand.add_card(self.shoe.deal_card())
-                    if hand.is_bust():
-                        break
-
-                elif action == "stand":
-                    break
-
-                elif action == "double":
-                    hand.bet *= 2
-                    hand.doubled = True
-                    hand.add_card(self.shoe.deal_card())
-                    break
-
-                elif action == "split":                 
+                
+                if action == "split":                 
                     # Check if splitting aces now
-                    splitting_aces = (hand.cards[0].rank == 'A' and hand.cards[1].rank == 'A')
+                    split_aces = (hand.cards[0].rank == 'A' and hand.cards[1].rank == 'A')
 
                     split_count += 1
 
@@ -129,42 +110,56 @@ class BlackjackGame:
                     hand.add_card(self.shoe.deal_card())  # draw card for first hand
                     new_hand.add_card(self.shoe.deal_card())
                     player_hands.append(new_hand)
+                    
+                    break
 
-                    # If splitting aces, flag both hands
-                    if splitting_aces:
-                        new_hand.is_split_aces = True
-                        hand.is_split_aces = True
+                elif action == "hit":
+                    hand.add_card(self.shoe.deal_card())
+                    if hand.is_bust():
+                        i += 1
                         break
-                    continue
+
+                elif action == "stand":
+                    i += 1
+                    break
+
+                elif action == "double":
+                    hand.bet *= 2
+                    hand.doubled = True
+                    hand.add_card(self.shoe.deal_card())
+                    i += 1
+                    break
+                
                 else:
                     print("error")
                     break
-
-            i += 1
 
         # Dealer's turn
         while self.dealer_should_hit(dealer_hand):
             dealer_hand.add_card(self.shoe.deal_card())
 
         # Settle results
-        results = []
+        results_round = []
         for hand in player_hands:
+            bet = hand.bet
             if hand.is_blackjack() and not dealer_hand.is_blackjack() and split_count == 0:
-                results.append(1.5 * hand.bet)
+                profit = 1.5 * bet
             elif (not hand.is_blackjack() or split_count != 0) and dealer_hand.is_blackjack():
-                results.append(-hand.bet)
+                profit = -bet
             elif hand.is_bust():
-                results.append(-hand.bet)
+                profit = -bet
             elif dealer_hand.is_bust():
-                results.append(hand.bet)
+                profit = bet
             elif hand.value() > dealer_hand.value():
-                results.append(hand.bet)
+                profit = bet
             elif hand.value() < dealer_hand.value():
-                results.append(-hand.bet)
+                profit = -bet
             else:
-                results.append(0)
+                profit = 0
 
-        return results
+            results_round.append((profit, bet))
+            
+        return results_round
 
 
     def dealer_should_hit(self, hand):
@@ -265,9 +260,19 @@ def basic_strategy(hand, dealer_upcard, split_allowed):
             return "hit"
         return "stand"
 
-# Example usage with a simple "hit under 17" strategy
+def print_house_edge(results):
+    total_profit = sum(p for p, _ in results)
+    total_wagered = sum(w for _, w in results)
+    house_edge = total_profit / total_wagered
+    print(house_edge)
+    
 if __name__ == "__main__":
     game = BlackjackGame(num_decks=6, penetration=0.75, dealer_hits_soft_17=True)
     num_runs = 1000000
-    results = [game.play_round(basic_strategy) for _ in range(num_runs)]
-    print(sum(bet for hand in results for bet in hand)/num_runs)
+    
+    results = []
+    for _ in range(num_runs):
+        round_results = game.play_round(basic_strategy)  # list of (profit, bet)
+        results.extend(round_results)  # flatten
+    
+    print_house_edge(results)

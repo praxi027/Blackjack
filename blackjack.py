@@ -31,10 +31,13 @@ class Shoe:
         random.shuffle(self.cards)
 
     def deal_card(self):
-        # Shuffle if penetration reached
-        if len(self.cards) < (1 - self.penetration) * 52 * self.num_decks:
-            self.shuffle()
+        if len(self.cards) == 0:
+            print("Shoe is empty, cannot deal card.")
+            return None
         return self.cards.pop()
+    
+    def penetration_reached(self):
+        return len(self.cards) < (1 - self.penetration) * self.num_decks * 52
 
 class Hand:
     def __init__(self, bet=1):
@@ -83,8 +86,11 @@ class BlackjackGame:
         self.dealer_hits_soft_17 = dealer_hits_soft_17
         self.surrender_allowed = surrender_allowed
 
-    def play_round(self, player_strategy):
-        player_hands = [Hand()]
+    def play_round(self, player_strategy, bet=1):
+        if self.shoe.penetration_reached():
+            self.shoe.shuffle()
+            
+        player_hands = [Hand(bet)]
         dealer_hand = Hand()
         split_count = 0  # track number of splits done
 
@@ -177,121 +183,4 @@ class BlackjackGame:
             return True
         return False
 
-def basic_strategy(hand, dealer_upcard, split_allowed, dealer_hits_soft_17, surrender_allowed):
-    if hand.value() == 21: 
-        return "stand"
-    
-    up = dealer_upcard.value
-    total = hand.value()
-    ranks = [c.rank for c in hand.cards]
 
-    # Surrender 
-    if surrender_allowed and len(hand.cards) == 2 and not hand.is_soft():
-        if total == 17 and up == 11:
-            return "surrender"
-        elif total == 16:
-            if hand.is_pair() and up == 11:
-                return "surrender"
-            elif not hand.is_pair() and up in [9, 10, 11]:
-                return "surrender"
-        elif total == 15 and up in [10, 11]:
-            return "surrender"
-
-    # Pair splitting
-    if hand.is_pair() and split_allowed:
-        r = ranks[0]
-        if r in ['A', '8']:
-            return "split"
-        if r in ['2', '3', '7'] and up in range(2, 8):
-            return "split"
-        if r == '6' and up in range(2, 7):
-            return "split"
-        if r == '9' and up in [2, 3, 4, 5, 6, 8, 9]:
-            return "split"
-        if r == '4' and up in [5, 6]:
-            return "split"
-
-    # Soft totals
-    if hand.is_soft():
-        if hand.can_double():
-            other = total - 11
-            if other in [2, 3] and up in [5, 6]:
-                return "double"
-            elif other in [4, 5] and up in range(4, 7):
-                return "double"
-            elif other == 6 and up in range(3, 7):
-                return "double"
-            elif other == 7:
-                if up in range(2, 7):
-                    return "double"
-                elif up in [7, 8]:
-                    return "stand"
-            elif other == 8 and up == 6:
-                return "double"
-            elif other == 9:
-                return "stand"
-            return "hit"
-        else: 
-            other = total - 11
-            if other in range(2, 7):
-                return "hit"
-            elif other == 7:
-                if up in range(2, 9):
-                    return "stand"
-                else:
-                    return "hit"
-            else:
-                return "stand"
-                
-    # Hard totals
-    if hand.can_double():
-        if total <= 8:
-            return "hit"
-        elif total == 9:
-            if up in range(3, 7):
-                return "double"
-            return "hit"
-        elif total == 10:
-            if up in range(2, 10):
-                return "double"
-            return "hit"
-        elif total == 11:
-            return "double"
-        elif total == 12:
-            if up in range(4, 7):
-                return "stand"
-            return "hit"
-        elif total in range(13, 17):
-            if up in range(2, 7):
-                return "stand"
-            return "hit"
-        return "stand"
-    else:
-        if total <= 11:
-            return "hit"
-        elif total == 12:
-            if up in range(4, 7):
-                return "stand"
-            return "hit"
-        elif total in range(13, 17):
-            if up in range(2, 7):
-                return "stand"
-            return "hit"
-        return "stand"
-
-def print_house_edge(results):
-    total_profit = sum(p for p, _ in results)
-    total_wagered = sum(w for _, w in results)
-    house_edge = total_profit / total_wagered
-    print(house_edge)
-    
-if __name__ == "__main__":
-    game = BlackjackGame(num_decks=6, penetration=0.75, dealer_hits_soft_17=True, surrender_allowed=True)
-    num_runs = 10000000
-    
-    results = []
-    for _ in range(num_runs):
-        round_results = game.play_round(basic_strategy)  # list of (profit, bet)
-        results.extend(round_results)  # flatten
-    
-    print_house_edge(results)

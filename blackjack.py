@@ -41,6 +41,7 @@ class Hand:
         self.cards = []
         self.bet = bet
         self.doubled = False
+        self.surrendered = False
 
     def add_card(self, card):
         self.cards.append(card)
@@ -77,9 +78,10 @@ class Hand:
         return len(self.cards) == 2
 
 class BlackjackGame:
-    def __init__(self, num_decks=6, penetration=0.75, dealer_hits_soft_17=True):
+    def __init__(self, num_decks=6, penetration=0.75, dealer_hits_soft_17=True, surrender_allowed=True):
         self.shoe = Shoe(num_decks, penetration)
         self.dealer_hits_soft_17 = dealer_hits_soft_17
+        self.surrender_allowed = surrender_allowed
 
     def play_round(self, player_strategy):
         player_hands = [Hand()]
@@ -92,17 +94,13 @@ class BlackjackGame:
             dealer_hand.add_card(self.shoe.deal_card())
 
         i = 0
-        split_aces = False
-        while i < len(player_hands) and not split_aces:
+        while i < len(player_hands):
             hand = player_hands[i]
 
             while True:
-                action = player_strategy(hand, dealer_hand.cards[0], split_allowed=split_count < 3)
+                action = player_strategy(hand, dealer_hand.cards[0], split_count < 3, self.dealer_hits_soft_17, self.surrender_allowed)
                 
                 if action == "split":                 
-                    # Check if splitting aces now
-                    split_aces = (hand.cards[0].rank == 'A' and hand.cards[1].rank == 'A')
-
                     split_count += 1
 
                     new_hand = Hand(bet=hand.bet)
@@ -111,7 +109,11 @@ class BlackjackGame:
                     new_hand.add_card(self.shoe.deal_card())
                     player_hands.append(new_hand)
                     
-                    break
+                    if hand.cards[0].rank == 'A' and hand.cards[1].rank == 'A':
+                        i = len(player_hands)  # end turn after splitting aces
+                        break
+                    else:
+                        continue  # re-evaluate the current hand after split
 
                 elif action == "hit":
                     hand.add_card(self.shoe.deal_card())
@@ -130,8 +132,12 @@ class BlackjackGame:
                     i += 1
                     break
                 
+                elif action == "surrender":
+                    hand.surrendered = True
+                    i += 1
+                    break
                 else:
-                    print("error")
+                    print("Error: Wrong action selected by strategy.")
                     break
 
         # Dealer's turn
@@ -146,6 +152,8 @@ class BlackjackGame:
                 profit = 1.5 * bet
             elif (not hand.is_blackjack() or split_count != 0) and dealer_hand.is_blackjack():
                 profit = -bet
+            elif hand.surrendered:
+                profit = -bet / 2
             elif hand.is_bust():
                 profit = -bet
             elif dealer_hand.is_bust():
@@ -169,13 +177,25 @@ class BlackjackGame:
             return True
         return False
 
-def basic_strategy(hand, dealer_upcard, split_allowed):
+def basic_strategy(hand, dealer_upcard, split_allowed, dealer_hits_soft_17, surrender_allowed):
     if hand.value() == 21: 
         return "stand"
     
     up = dealer_upcard.value
     total = hand.value()
     ranks = [c.rank for c in hand.cards]
+
+    # Surrender 
+    if surrender_allowed and len(hand.cards) == 2 and not hand.is_soft():
+        if total == 17 and up == 11:
+            return "surrender"
+        elif total == 16:
+            if hand.is_pair() and up == 11:
+                return "surrender"
+            elif not hand.is_pair() and up in [9, 10, 11]:
+                return "surrender"
+        elif total == 15 and up in [10, 11]:
+            return "surrender"
 
     # Pair splitting
     if hand.is_pair() and split_allowed:
@@ -204,26 +224,25 @@ def basic_strategy(hand, dealer_upcard, split_allowed):
             elif other == 7:
                 if up in range(2, 7):
                     return "double"
-                if up in [7, 8]:
+                elif up in [7, 8]:
                     return "stand"
             elif other == 8 and up == 6:
                 return "double"
             elif other == 9:
                 return "stand"
+            return "hit"
         else: 
             other = total - 11
-            if other in [2, 3] and up in [5, 6]:
-                return "hit"
-            elif other in [4, 5] and up in range(4, 7):
-                return "hit"
-            elif other == 6 and up in range(3, 7):
+            if other in range(2, 7):
                 return "hit"
             elif other == 7:
                 if up in range(2, 9):
                     return "stand"
-            elif other in [8, 9]:
+                else:
+                    return "hit"
+            else:
                 return "stand"
-    
+                
     # Hard totals
     if hand.can_double():
         if total <= 8:
@@ -267,8 +286,8 @@ def print_house_edge(results):
     print(house_edge)
     
 if __name__ == "__main__":
-    game = BlackjackGame(num_decks=6, penetration=0.75, dealer_hits_soft_17=True)
-    num_runs = 1000000
+    game = BlackjackGame(num_decks=6, penetration=0.75, dealer_hits_soft_17=True, surrender_allowed=True)
+    num_runs = 10000000
     
     results = []
     for _ in range(num_runs):

@@ -8,15 +8,18 @@ def basic_strategy(hand, dealer_upcard, split_allowed, dealer_hits_soft_17, surr
 
     # Surrender 
     if surrender_allowed and len(hand.cards) == 2 and not hand.is_soft():
-        if total == 17 and up == 11:
+        if total == 17 and up == 11 and dealer_hits_soft_17:
             return "surrender"
         elif total == 16:
-            if hand.is_pair() and up == 11:
+            if hand.is_pair() and up == 11 and dealer_hits_soft_17:
                 return "surrender"
             elif not hand.is_pair() and up in [9, 10, 11]:
                 return "surrender"
-        elif total == 15 and up in [10, 11]:
-            return "surrender"
+        elif total == 15:
+            if up in [10, 11] and dealer_hits_soft_17:
+                return "surrender"
+            elif up == 10:
+                return "surrender"
 
     # Pair splitting
     if hand.is_pair() and split_allowed:
@@ -48,7 +51,10 @@ def basic_strategy(hand, dealer_upcard, split_allowed, dealer_hits_soft_17, surr
                 elif up in [7, 8]:
                     return "stand"
             elif other == 8 and up == 6:
-                return "double"
+                if dealer_hits_soft_17:
+                    return "double"
+                else:
+                    return "stand"
             elif other == 9:
                 return "stand"
             return "hit"
@@ -77,7 +83,9 @@ def basic_strategy(hand, dealer_upcard, split_allowed, dealer_hits_soft_17, surr
                 return "double"
             return "hit"
         elif total == 11:
-            return "double"
+            if dealer_hits_soft_17:
+                return "double"
+            return "hit"
         elif total == 12:
             if up in range(4, 7):
                 return "stand"

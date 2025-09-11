@@ -23,21 +23,38 @@ class Shoe:
         self.num_decks = num_decks
         self.penetration = penetration
         self.shuffle()
+        self.count = 0
 
     def shuffle(self):
         ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
         suits = ['♠', '♥', '♦', '♣']
         self.cards = [Card(rank, suit) for rank in ranks for suit in suits] * self.num_decks
         random.shuffle(self.cards)
+        self.count = 0  
 
     def deal_card(self):
         if len(self.cards) == 0:
             print("Shoe is empty, cannot deal card.")
             return None
-        return self.cards.pop()
+
+        card = self.cards.pop()
+        
+        # Update running count for Hi-Lo system
+        if card.rank in ['2', '3', '4', '5', '6']:
+            self.count += 1
+        elif card.rank in ['10', 'J', 'Q', 'K', 'A']:
+            self.count -= 1
+
+        return card
     
     def penetration_reached(self):
         return len(self.cards) < (1 - self.penetration) * self.num_decks * 52
+    
+    def get_true_count(self):
+        decks_remaining = len(self.cards) / 52
+        if decks_remaining == 0:
+            return 0
+        return int(round(self.count / decks_remaining))
 
 class Hand:
     def __init__(self, bet=1):
@@ -87,9 +104,6 @@ class BlackjackGame:
         self.surrender_allowed = surrender_allowed
 
     def play_round(self, player_strategy, bet=1):
-        if self.shoe.penetration_reached():
-            self.shoe.shuffle()
-            
         player_hands = [Hand(bet)]
         dealer_hand = Hand()
         split_count = 0  # track number of splits done
@@ -104,7 +118,7 @@ class BlackjackGame:
             hand = player_hands[i]
 
             while True:
-                action = player_strategy(hand, dealer_hand.cards[0], split_count < 3, self.dealer_hits_soft_17, self.surrender_allowed)
+                action = player_strategy(hand, dealer_hand.cards[0], split_count < 3, self.surrender_allowed, self.shoe.get_true_count())
                 
                 if action == "split":                 
                     split_count += 1
@@ -150,6 +164,9 @@ class BlackjackGame:
         while self.dealer_should_hit(dealer_hand):
             dealer_hand.add_card(self.shoe.deal_card())
 
+        if self.shoe.penetration_reached():
+            self.shoe.shuffle()
+            
         # Settle results
         results_round = []
         for hand in player_hands:

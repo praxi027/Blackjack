@@ -1,5 +1,5 @@
 from blackjack import BlackjackGame
-from strategy import basic_strategy
+from strategy import basic_strategy_h17
 
 def print_house_edge(results):
     total_profit = sum(p for p, _ in results)
@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     results = []
     for _ in range(num_runs):
-        round_results = game.play_round(basic_strategy, bet=1)  # list of (profit, bet)
+        round_results = game.play_round(basic_strategy_h17, bet=1)  # list of (profit, bet)
         results.extend(round_results)  # flatten
     
     print_house_edge(results)
